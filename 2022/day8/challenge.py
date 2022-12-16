@@ -45,3 +45,87 @@ def parse_input():
     with open(PUZZLE_INPUT, "r") as f:
         lines = f.readlines()
     return lines
+
+
+class Forest:
+    def __init__(self, lines):
+        self.trees = []
+        for y, line in enumerate(lines):
+            for x, char in enumerate(line):
+                self.trees.append(Tree(x, y, char))
+
+    def __repr__(self):
+        return f"Forest(trees={len(self.trees)})"
+
+    def count_visible_trees(self):
+        visible_trees = 0
+        for tree in self.trees:
+            if self.is_visible(tree):
+                visible_trees += 1
+        return visible_trees
+
+    def find_trees(self, filter_params={}):
+        found_items = []
+
+        for item in self.trees:
+            # if all(
+            #     item.__dict__.get(key, None) == val
+            #     for key, val in filter_params.items()
+            # ):
+
+            for key, value in filter_params.items():
+                if isinstance(value, dict):
+                    for sub_key, sub_value in value.items():
+                        if sub_key == "$lt":
+                            if item.__dict__[key] >= sub_value:
+                                break
+                        elif sub_key == "$gt":
+                            if item.__dict__[key] <= sub_value:
+                                break
+                else:
+                    if item.__dict__[key] != value:
+                        break
+            else:
+
+                found_items.append(item)
+        return found_items
+
+    def related_trees(self, tree):
+        related_trees = {"left": [], "right": [], "top": [], "bottom": []}
+        related_trees["left"] = self.find_trees({"y": tree.y, "x": {"$lt": tree.x}})
+        related_trees["right"] = self.find_trees({"y": tree.y, "x": {"$gt": tree.x}})
+        related_trees["top"] = self.find_trees({"x": tree.x, "y": {"$lt": tree.y}})
+        related_trees["bottom"] = self.find_trees({"x": tree.x, "y": {"$gt": tree.y}})
+        return related_trees
+
+    def is_visible(self, tree):
+        related_trees = self.related_trees(tree)
+        for direction, trees in related_trees.items():
+            if not trees:
+                continue
+            if direction in ["left", "top"]:
+                trees.sort(key=lambda x: x.__dict__[direction], reverse=True)
+            else:
+                trees.sort(key=lambda x: x.__dict__[direction])
+            for related_tree in trees:
+                if related_tree.height > tree.height:
+                    return False
+        return True
+
+
+class Tree:
+    def __init__(self, x, y, height):
+        self.x = x
+        self.y = y
+        self.height = height
+        self.visible_from = []
+
+    def __repr__(self):
+        return f"Tree(x={self.x}, y={self.y}, height={self.height})"
+
+
+lines = parse_input()
+forest = Forest(lines)
+logger.info(f"forest: {forest}")
+# logger.info(f"trees: {forest.trees}")
+print(forest.related_trees(forest.trees[2]))
