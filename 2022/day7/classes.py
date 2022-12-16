@@ -1,9 +1,5 @@
 import sys
 import logging
-from pprint import pformat, pprint
-from dataclasses import dataclass
-from uuid import uuid1
-from functools import reduce
 
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -13,24 +9,23 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-@dataclass
 class Inode:
-    path: str
-    name: str
-    inode_type: str
-    size: int
+    def __init__(self, path: str, name: str, inode_type: str, size: int):
+        self.path = path
+        self.name = name
+        self.inode_type = inode_type
+        self.size = size
+
+        if self.name == "/":
+            self.fqdn = "/"
+        else:
+            self.fqdn = str(self.path) + self.name if self.name else str(self.path)
 
     def __repr__(self):
-        return f"inode({self.path.as_string()}, {self.name}, {self.inode_type}, {self.size})"
+        return f"inode({str(self.path)}, {self.name}, {self.inode_type}, {self.size})"
 
     def __str__(self) -> str:
-        return f"{self.path.as_string()+self.name}" if self.name != "/" else "/"
-
-    def __add__(self, other):
-        if isinstance(other, Inode):
-            return self.size + other.size
-        else:
-            raise TypeError(f"Cannot add Inode to object of type {type(other)}")
+        return f"{self.fqdn}" if self.name != "/" else "/"
 
 
 class FileInode(Inode):
@@ -100,24 +95,6 @@ class SuperBlock:
     def add_inode(self, inode):
         self.inodes.append(inode)
 
-    def inode_children(self, path, recursive=False):
-        logger.debug(f"Searching for children of {path}")
-        nodes_params = {"path": path}
-
-        def _node_children(path):
-            tmp_list = []
-            for node in self.find_inodes(nodes_params):
-                if node.inode_type == "dir":
-                    tmp_list += _node_children(node)
-                else:
-                    tmp_list.append(node)
-            return tmp_list
-
-        if recursive:
-            return _node_children(path)
-        else:
-            return self.find_inodes({**nodes_params})
-
 
 class Path(list):
     """Describes list of inodes present in path to file
@@ -150,9 +127,11 @@ class Path(list):
 
         super().__init__(path)
 
-    def as_string(self):
+    def __str__(self):
         path = self
         if self == []:
+            path = "/"
+        elif self == ["/"]:
             path = "/"
         else:
             path = "/" + "/".join(self)
@@ -170,7 +149,7 @@ class Bash:
 
     @property
     def prompt(self):
-        return f"{self.pwd.as_string()} > "
+        return f"{str(self.pwd)} > "
 
     def _get_path(self, inode):
         path = []
@@ -180,14 +159,22 @@ class Bash:
         path.append(inode.name)
         return "/".join(path[::-1])
 
-    def ls(self, path=None):
+    def ls(self, path=None, recursive=False):
         if not path:
             path = self.pwd
-        logger.debug("looking up files in %s", path.as_string())
-        found_inodes = self.filesystem.find_inodes({"path": path.as_string()})
-        logger.info(
-            f"all inodes in '{path.as_string()}': {[node.name for node in found_inodes]}"
+        logger.debug(
+            f"looking up files in {str(path)}{', recursively' if recursive else ''}"
         )
+        found_inodes = self.filesystem.find_inodes({"path": str(path)})
+        if recursive:
+            for node in found_inodes:
+                if node.inode_type == "dir":
+                    found_inodes.extend(self.ls(node.fqdn, recursive=True))
+        if not recursive:
+            logger.info(
+                f"nodes found': {[(str(node), node.size) for node in found_inodes]}"
+            )
+
         return found_inodes
 
     def cd(self, path=None):
@@ -225,14 +212,23 @@ class Bash:
         self.filesystem.add_inode(FileInode(self.pwd, file_name, size))
         return self
 
-    def du(self, inode=None, all=False):
-        logger.debug(f"Calculating size of {inode} (all={all})")
+    def du(self, path=None, recursive=False):
+        # Determine Path, sanitize input
+        if path is None:
+            path = str(self.pwd)
+        # Gather sizes, recursively if all=True
+        logger.debug(
+            f"Calculating size of {str(path)} {', recursively' if recursive else ''})"
+        )
         total_size = 0
-        if inode is None:
-            inode = self.pwd
-        if isinstance(inode, str) and all:
-            inode = self.filesystem.find_inodes({"path": inode}, recursive=True)
-        elif isinstance(inode, str):
-            inode = self.filesystem.find_inodes({"path": inode})
-        print(inode)
+        if recursive:
+            logger.debug(
+                f"  Starting recursive size calculation",
+            )
+            inodes = self.ls(path, recursive=recursive)
+            for inode in inodes:
+                total_size += inode.size
+        else:
+            inodes = self.ls(path)
+            total_size += sum([node.size for node in inodes])
         return total_size

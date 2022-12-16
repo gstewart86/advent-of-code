@@ -104,17 +104,51 @@ for line in PUZZLE_INPUT:
                     bash.ls()
         case "dir":
             bash.mkdir(line_items[-1])
+
         case x if int(x):
             bash.touch(line_items[-1], int(line_items[0]))
         case _:
             raise ValueError("Failed to parse line_items: %s", line_items)
+bash.cd()
+logger.info("starting tests------------------------------------")
+logger.info("Basic counts------")
+print("total_inodes", len(bash.filesystem.inodes))
+print(
+    "dirs", len([node for node in bash.filesystem.inodes if node.inode_type == "dir"])
+)
+print(
+    "files", len([node for node in bash.filesystem.inodes if node.inode_type == "file"])
+)
 
+print("find Children------")
 pprint(
-    fs.inode_children(
-        "/",
+    bash.ls(
+        "/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq",
     )
 )
+
+print("add size------")
 random_dirs = [inode for inode in fs.find_inodes({"inode_type": "file"})][:5]
 pprint(random_dirs)
 pprint(sum([node.size for node in random_dirs]))
+
+print("find by filter------")
 pprint(fs.find_inodes({"name": "rrqzqwl.frp", "size": 59022}))
+
+print("du------")
+print("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/, non-recursively")
+pprint(bash.du("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/"))
+print("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/, recursively")
+pprint(bash.du("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/", recursive=True))
+
+# nodes_less_than_100000 = []
+# for node in [
+#     node for node in list(reversed(bash.filesystem.inodes)) if node.inode_type == "dir"
+# ]:
+#     size = bash.du(node.fqdn, recursive=True)
+#     if size <= 100000:
+#         node.size = size
+#         nodes_less_than_100000.append((node))
+
+# pprint(nodes_less_than_100000)
+# pprint(sum([node.size for node in nodes_less_than_100000]))
