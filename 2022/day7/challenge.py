@@ -74,8 +74,7 @@
 # Find all of the directories with a total size of at most 100000. What is the sum of the total sizes of those directories?
 import os
 import sys
-import logging
-from pprint import pformat, pprint
+from pprint import pprint
 
 # Import local modules
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -104,7 +103,6 @@ for line in PUZZLE_INPUT:
                     bash.ls()
         case "dir":
             bash.mkdir(line_items[-1])
-
         case x if int(x):
             bash.touch(line_items[-1], int(line_items[0]))
         case _:
@@ -140,18 +138,70 @@ pprint(fs.find_inodes({"name": "rrqzqwl.frp", "size": 59022}))
 
 print("du------")
 print("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/, non-recursively")
+print("result:")
 pprint(bash.du("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/"))
+print("expected: 612922")
 print("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/, recursively")
+print("result:")
 pprint(bash.du("/vpfdwq/zzp/zbdpt/jjmfpmnn/wqzq/", recursive=True))
+print("expected: 1258704")
 
-# nodes_less_than_100000 = []
-# for node in [
-#     node for node in list(reversed(bash.filesystem.inodes)) if node.inode_type == "dir"
-# ]:
-#     size = bash.du(node.fqdn, recursive=True)
-#     if size <= 100000:
-#         node.size = size
-#         nodes_less_than_100000.append((node))
+print("find all dirs with size <= 100000------")
+nodes_less_than_100000 = []
+for node in bash.filesystem.inodes:
+    if node.inode_type == "dir":
+        if node.size <= 100000:
+            print(node, node.size)
+            nodes_less_than_100000.append((node))
+nodes_less_than_100000_total_size = sum([node.size for node in nodes_less_than_100000])
+print("total size", nodes_less_than_100000_total_size)  # expected 1232307
 
-# pprint(nodes_less_than_100000)
-# pprint(sum([node.size for node in nodes_less_than_100000]))
+# --- Part Two ---
+# Now, you're ready to choose a directory to delete.
+
+# The total disk space available to the filesystem is 70000000. To run the update, you need unused space of at least 30000000. You need to find a directory you can delete that will free up enough space to run the update.
+
+# In the example above, the total size of the outermost directory (and thus the total amount of used space) is 48381165; this means that the size of the unused space must currently be 21618835, which isn't quite the 30000000 required by the update. Therefore, the update still requires a directory with total size of at least 8381165 to be deleted before it can run.
+
+# To achieve this, you have the following options:
+
+# Delete directory e, which would increase unused space by 584.
+# Delete directory a, which would increase unused space by 94853.
+# Delete directory d, which would increase unused space by 24933642.
+# Delete directory /, which would increase unused space by 48381165.
+# Directories e and a are both too small; deleting them would not free up enough space. However, directories d and / are both big enough! Between these, choose the smallest: d, increasing unused space by 24933642.
+
+# Find the smallest directory that, if deleted, would free up enough space on the filesystem to run the update. What is the total size of that directory?
+
+TOTAL_FS_SIZE = 70000000
+REQUIRED_FREE_SPACE = 30000000
+CURRENT_USED_SPACE = bash.du("/", recursive=True)
+CURRENT_FREE_SPACE = TOTAL_FS_SIZE - CURRENT_USED_SPACE
+SIZE_TARGET = REQUIRED_FREE_SPACE - CURRENT_FREE_SPACE
+
+smallest_dir = None
+dirs = bash.filesystem.find_inodes({"inode_type": "dir"})
+for dir in dirs:
+    if dir.size >= SIZE_TARGET:
+        logger.debug(
+            f"candidate dir: {dir}, size: {dir.size}, existing smallest_dir: {smallest_dir}, size: {smallest_dir.size if smallest_dir else None}"
+        )
+        if smallest_dir and smallest_dir.size > dir.size:
+            logger.debug("Replacing smallest dir. %s < %s", smallest_dir, dir)
+            smallest_dir = dir
+        elif not smallest_dir:
+            logger.debug("smallest dir was None, setting to %s", dir)
+            smallest_dir = dir
+
+pprint(
+    {
+        "smallest_dir": smallest_dir,
+        "size target": SIZE_TARGET,
+        "total filesystem size": TOTAL_FS_SIZE,
+        "required free space": REQUIRED_FREE_SPACE,
+        "currently used space": CURRENT_USED_SPACE,
+        "currently free space": CURRENT_FREE_SPACE,
+        "resulting free space if smallest_dir is deleted": CURRENT_FREE_SPACE
+        + smallest_dir.size,
+    }
+)
