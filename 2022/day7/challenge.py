@@ -109,26 +109,12 @@ for line in PUZZLE_INPUT:
         case _:
             raise ValueError("Failed to parse line_items: %s", line_items)
 
-# print("tests")
-# print("Bash ls", bash.ls())
-# test_children = "psqmv"
-# print(f"inode children for {test_children}")
-# pprint(fs.inode_children(test_children))
-
-# print(f"Bash du {test_children}", bash.du())
-# import yaml
-
-# print(yaml.dump(yaml.load(Bash.filesystem)))
-small_inodes = []
-small_inodes_sum = 0
-for inode in fs.inodes:
-    if inode.inode_type == "dir":
-        size = bash.du(inode)
-        if size <= 100000:
-            small_inodes_sum += size
-            small_inodes.append((inode.name, size))
-pprint(sorted(small_inodes, key=lambda x: x[1]))
-print(small_inodes_sum)
-
-print(fs.inode_children("/", "/"))
-print(fs.find_inodes({"name": "rrqzqwl.frp", "size": 59022}))
+pprint(
+    fs.inode_children(
+        "/",
+    )
+)
+random_dirs = [inode for inode in fs.find_inodes({"inode_type": "file"})][:5]
+pprint(random_dirs)
+pprint(sum([node.size for node in random_dirs]))
+pprint(fs.find_inodes({"name": "rrqzqwl.frp", "size": 59022}))

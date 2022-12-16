@@ -3,6 +3,7 @@ import logging
 from pprint import pformat, pprint
 from dataclasses import dataclass
 from uuid import uuid1
+from functools import reduce
 
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -20,7 +21,16 @@ class Inode:
     size: int
 
     def __repr__(self):
-        return f"inode({self.path}, {self.name}, {self.inode_type}, {self.size})"
+        return f"inode({self.path.as_string()}, {self.name}, {self.inode_type}, {self.size})"
+
+    def __str__(self) -> str:
+        return f"{self.path.as_string()+self.name}" if self.name != "/" else "/"
+
+    def __add__(self, other):
+        if isinstance(other, Inode):
+            return self.size + other.size
+        else:
+            raise TypeError(f"Cannot add Inode to object of type {type(other)}")
 
 
 class FileInode(Inode):
@@ -71,45 +81,82 @@ class SuperBlock:
         """
         found_inodes = []
         logger.debug(f"Searching for inode with params: {inode_params}")
+
+        # expand path argument
+        if "path" in inode_params:
+            inode_params["path"] = Path(inode_params["path"])
+
         for node in self.inodes:
             if all(
                 node.__dict__.get(key, None) == val for key, val in inode_params.items()
             ):
                 found_inodes.append(node)
-        return found_inodes
+        return sorted(
+            sorted(found_inodes, key=lambda x: x.inode_type),
+            key=lambda x: x.size,
+            reverse=True,
+        )
 
     def add_inode(self, inode):
         self.inodes.append(inode)
 
-    def inode_children(self, path, name, filter="file", recursive=False):
-        tmp_list = []
+    def inode_children(self, path, recursive=False):
+        logger.debug(f"Searching for children of {path}")
+        nodes_params = {"path": path}
 
-        if isinstance(name, str):
-            inode = self.find_inodes({"name": name})
+        def _node_children(path):
+            tmp_list = []
+            for node in self.find_inodes(nodes_params):
+                if node.inode_type == "dir":
+                    tmp_list += _node_children(node)
+                else:
+                    tmp_list.append(node)
+            return tmp_list
 
-        def _find_children(inode):
-            for node in self.inodes:
-                if node.name == inode:
-                    if node.inode_type == filter:
-                        if node not in tmp_list:
-                            tmp_list.append(node)
-                    if recursive:
-                        _find_children(node)
-
-        _find_children(name)
-        return tmp_list
+        if recursive:
+            return _node_children(path)
+        else:
+            return self.find_inodes({**nodes_params})
 
 
 class Path(list):
+    """Describes list of inodes present in path to file
+
+    Args:
+        list (_type_): subclass of list
+    """
+
     def __init__(self, path=[]):
-        if isinstance(path, str) and path != "/":
-            path = path.split("/")
+        """generate a path object.
+        If path is a string, it will be split on '/' and converted to a list.
+        Ensures the path does not contain spaces.
+        An empty list represents the root directory.
+
+        Args:
+            path (list, optional): list of inodes. Defaults to [].
+
+        Raises:
+            ValueError: _description_
+        """
         if " " in path:
             raise ValueError(f"Path cannot contain spaces: {path}")
+
+        if path == "/":
+            path = []
+        elif isinstance(path, str):
+            path = path.split("/")
+
+        path = [node for node in path if node != ""]
+
         super().__init__(path)
 
     def as_string(self):
-        return "/".join(self)
+        path = self
+        if self == []:
+            path = "/"
+        else:
+            path = "/" + "/".join(self)
+        return path
 
 
 class Bash:
@@ -179,11 +226,13 @@ class Bash:
         return self
 
     def du(self, inode=None, all=False):
-        logger.debug(f"Calculating size of {inode} (all={all}")
+        logger.debug(f"Calculating size of {inode} (all={all})")
         total_size = 0
         if inode is None:
             inode = self.pwd
-        if isinstance(inode, str):
+        if isinstance(inode, str) and all:
+            inode = self.filesystem.find_inodes({"path": inode}, recursive=True)
+        elif isinstance(inode, str):
             inode = self.filesystem.find_inodes({"path": inode})
         print(inode)
         return total_size
