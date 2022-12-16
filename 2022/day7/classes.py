@@ -19,7 +19,9 @@ class Inode:
         if self.name == "/":
             self.fqdn = "/"
         else:
-            self.fqdn = str(self.path) + self.name if self.name else str(self.path)
+            self.fqdn = str(
+                Path(str(self.path) + "/" + self.name if self.name else str(self.path))
+            )
 
     def __repr__(self):
         return f"inode({str(self.path)}, {self.name}, {self.inode_type}, {self.size})"
@@ -118,13 +120,31 @@ class Path(list):
         if " " in path:
             raise ValueError(f"Path cannot contain spaces: {path}")
 
-        if path == "/":
-            path = []
+        if isinstance(path, list):
+            pass
+        elif isinstance(path, Path):
+            path = path.copy()
+        elif isinstance(path, Inode):
+            path = path.path.copy()
+        elif path == "/":
+            path = ["/"]
         elif isinstance(path, str):
             path = path.split("/")
 
-        path = [node for node in path if node != ""]
+        # Initialially here I had:
+        # path = [node for node in path if node != ""]
+        # but this was causing issues with making the root directory
+        # unable to be searched, since it was being removed from the path.
+        # So instead we're just popping any remaining empty strings on the end
+        # of the path.
+        if path:
+            if path[-1] == "":
+                path.pop()
 
+        # lastly ensure the first empty element is a slash
+        if path:
+            if path[0] == "":
+                path[0] = "/"
         super().__init__(path)
 
     def __str__(self):
@@ -134,7 +154,9 @@ class Path(list):
         elif self == ["/"]:
             path = "/"
         else:
-            path = "/" + "/".join(self)
+            path = "/".join(self)
+
+        path = path.replace("//", "/")
         return path
 
 
@@ -151,21 +173,13 @@ class Bash:
     def prompt(self):
         return f"{str(self.pwd)} > "
 
-    def _get_path(self, inode):
-        path = []
-        while inode.path != self.filesystem.root.name:
-            path.append(inode.name)
-            inode = self.filesystem.find_inode({"path": inode.path})
-        path.append(inode.name)
-        return "/".join(path[::-1])
-
     def ls(self, path=None, recursive=False):
         if not path:
             path = self.pwd
         logger.debug(
             f"looking up files in {str(path)}{', recursively' if recursive else ''}"
         )
-        found_inodes = self.filesystem.find_inodes({"path": str(path)})
+        found_inodes = self.filesystem.find_inodes({"path": path})
         if recursive:
             for node in found_inodes:
                 if node.inode_type == "dir":
@@ -179,18 +193,21 @@ class Bash:
 
     def cd(self, path=None):
         self.oldpwd = self.pwd
-        if not path:
-            path = self.filesystem.root.path
-        if path == "/":
-            destination_path = Path("/")
+        logger.info(f"changing from {self.oldpwd} to {path}")
+        destination_path = path
+        if path is None:
+            destination_path = self.filesystem.root.path
         elif path == "..":
             if self.pwd == "/":
                 destination_path = self.pwd
             else:
                 destination_path = self.pwd[:-1]
+        elif path == "-":
+            destination_path = self.oldpwd
+        elif path == "/" and self.pwd == ["/"]:
+            destination_path = path
         else:
             destination_path = self.pwd + [path]
-        logger.info(f"changed from {self.pwd} to {destination_path}")
         self.pwd = Path(destination_path)
         return self.pwd
 
@@ -201,9 +218,8 @@ class Bash:
     def mkdir(self, dir_name):
         logger.info(f"Creating dir inode: {dir_name}")
         inode = DirInode(self.pwd, dir_name)
-        # if inode in self.filesystem.inodes:
-        #     print([node for node in self.filesystem.inodes if node.name == dir_name])
-        #     raise ValueError(f"Directory {dir_name} already exists")
+        if self.filesystem.find_inodes({"path": inode.fqdn}):
+            raise ValueError(f"Directory {dir_name} already exists")
         self.filesystem.add_inode(inode)
         return self
 

@@ -109,6 +109,9 @@ for line in PUZZLE_INPUT:
             bash.touch(line_items[-1], int(line_items[0]))
         case _:
             raise ValueError("Failed to parse line_items: %s", line_items)
+print(
+    "EOF!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+)
 bash.cd()
 logger.info("starting tests------------------------------------")
 logger.info("Basic counts------")
