@@ -227,4 +227,3 @@ print(
 
 most_scenic_tree = sorted(forest.trees, key=lambda x: x.scenic_score, reverse=True)[0]
 print(f"most scenic tree: {most_scenic_tree}")
-print("debug")
