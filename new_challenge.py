@@ -3,7 +3,6 @@ from datetime import date
 from argparse import ArgumentParser
 import requests
 from bs4 import BeautifulSoup
-from pprint import pformat
 
 CHALLENGE_FILENAME = "challenge.py"
 INPUT_FILENAME = "puzzle_input.txt"
