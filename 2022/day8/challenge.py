@@ -30,7 +30,7 @@
 import os
 import sys
 import logging
-from pprint import pprint
+from math import prod
 
 logger = logging.getLogger("logger")
 logger.setLevel(logging.INFO)
@@ -56,9 +56,6 @@ class Forest:
             for x, char in enumerate(line):
                 self.trees.append(Tree(x, y, int(char)))
 
-        for idx, tree in enumerate(self.trees):
-            self.trees[idx] = self.check_visbility(tree)
-
     def __repr__(self):
         return f"Forest(trees={len(self.trees)})"
 
@@ -66,14 +63,12 @@ class Forest:
         logger.debug(f"Searching for trees with filter params: {filter_params}")
 
         def _find_trees(tree_list, filter_params):
-            found_items = []
             for item in tree_list:
                 if all(
                     item.__dict__.get(key, None) == val
                     for key, val in filter_params.items()
                 ):
-                    found_items.append(item)
-            return found_items
+                    yield item
 
         # detect dict in filter params
         filter_param_dict = False
@@ -93,6 +88,12 @@ class Forest:
                     elif sub_key == "$gt":
                         if item.__dict__[key] > sub_value:
                             initial_found_items.append(item)
+                    elif sub_key == "$lte":
+                        if item.__dict__[key] <= sub_value:
+                            initial_found_items.append(item)
+                    elif sub_key == "$gte":
+                        if item.__dict__[key] >= sub_value:
+                            initial_found_items.append(item)
 
                     # Then remove dictionaries from the filter params
                     filter_params = {
@@ -111,19 +112,32 @@ class Forest:
 
     def related_trees(self, tree):
         logger.debug(f"Finding related trees for tree: {tree}")
-        related_trees = {"left": [], "right": [], "top": [], "bottom": []}
+        related_trees = {"left": [], "right": [], "up": [], "down": []}
         related_trees["left"] = self.find_trees({"y": tree.y, "x": {"$lt": tree.x}})
         related_trees["right"] = self.find_trees({"y": tree.y, "x": {"$gt": tree.x}})
-        related_trees["top"] = self.find_trees({"x": tree.x, "y": {"$lt": tree.y}})
-        related_trees["bottom"] = self.find_trees({"x": tree.x, "y": {"$gt": tree.y}})
+        related_trees["up"] = self.find_trees({"x": tree.x, "y": {"$lt": tree.y}})
+        related_trees["down"] = self.find_trees({"x": tree.x, "y": {"$gt": tree.y}})
+
+        # Important to sort these to ensure closest tree is evaluated first
+        related_trees["left"] = sorted(
+            related_trees["left"], key=lambda x: x.x, reverse=True
+        )
+        related_trees["up"] = sorted(
+            related_trees["up"], key=lambda x: x.y, reverse=True
+        )
         return related_trees
 
     def check_visbility(self, tree):
         logger.debug(f"Checking visibility for tree: {tree}")
-        visibile_from = ["left", "right", "top", "bottom"]
+        visibile_from = ["left", "right", "up", "down"]
+        visibility = {"left": 0, "right": 0, "up": 0, "down": 0}
         related_trees = self.related_trees(tree)
         for direction, trees in related_trees.items():
             for related_tree in trees:
+                visibility[direction] += 1
+                logger.debug(
+                    f"{related_tree} visible from {tree}. Visibility count: {visibility[direction]}"
+                )
                 if related_tree.height >= tree.height:
                     logger.debug(
                         f"{tree} is not visible from {direction} due to {related_tree}"
@@ -131,22 +145,27 @@ class Forest:
                     visibile_from.remove(direction)
                     break
         tree.visible_from = visibile_from
-        logger.debug(f"{tree} is visible from {tree.visible_from}")
+        tree.visibility = visibility
+        logger.debug(
+            f"visibility for: {tree}, visible from: {tree.visible_from}, visibility: {tree.visibility}"
+        )
         return tree
 
 
 class Tree:
     def __init__(self, x, y, height):
+        self.id = x + y
         self.x: int = x
         self.y: int = y
         self.height: int = height
         self.visible_from = []
+        self.visibility = {}
 
     def __repr__(self):
-        return f"Tree(x={self.x}, y={self.y}, height={self.height})"
+        return f"Tree(x={self.x}, y={self.y}, height={self.height}, visible_from={self.visible_from}, visibility={self.visibility}, scenic_score={self.scenic_score})"
 
     def __str__(self):
-        return f"Tree(x={self.x}, y={self.y}, height={self.height})"
+        return f"Tree(x={self.x}, y={self.y}, height={self.height}, visible_from={self.visible_from}, visibility={self.visibility}, scenic_score={self.scenic_score})"
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
@@ -157,15 +176,19 @@ class Tree:
     def __lt__(self, other):
         return self.height < other.height
 
+    @property
+    def scenic_score(self):
+        return prod(self.visibility.values())
+
 
 forest = Forest(parse_input())
 logger.info(f"forest: {forest}")
+for idx, tree in enumerate(forest.trees):
+    forest.trees[idx] = forest.check_visbility(tree)
 
-visible_trees = 0
-for tree in forest.trees:
-    if tree.visible_from:
-        visible_trees += 1
-print(visible_trees)
+print(
+    f"no. of visible trees: {len([tree for tree in forest.trees if tree.visible_from])}"
+)
 
 # --- Part Two ---
 # Content with the amount of tree cover available, the Elves just need to know the best spot to build their tree house: they would like to be able to see a lot of trees.
@@ -201,3 +224,7 @@ print(visible_trees)
 # This tree's scenic score is 8 (2 * 2 * 1 * 2); this is the ideal spot for the tree house.
 
 # Consider each tree on your map. What is the highest scenic score possible for any tree?
+
+most_scenic_tree = sorted(forest.trees, key=lambda x: x.scenic_score, reverse=True)[0]
+print(f"most scenic tree: {most_scenic_tree}")
+print("debug")
