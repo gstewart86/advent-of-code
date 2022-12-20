@@ -30,7 +30,7 @@
 import os
 import sys
 import logging
-from pprint import pformat, pprint
+from pprint import pprint
 
 logger = logging.getLogger("logger")
 logger.setLevel(logging.INFO)
@@ -50,47 +50,67 @@ def parse_input():
 class Forest:
     def __init__(self, lines):
         self.trees = []
+        self.size = {"x": len(lines[0]), "y": len(lines)}
         for y, line in enumerate(lines):
+            line = line.rstrip()
             for x, char in enumerate(line):
-                self.trees.append(Tree(x, y, char))
+                self.trees.append(Tree(x, y, int(char)))
+
+        for idx, tree in enumerate(self.trees):
+            self.trees[idx] = self.check_visbility(tree)
 
     def __repr__(self):
         return f"Forest(trees={len(self.trees)})"
 
-    def count_visible_trees(self):
-        visible_trees = 0
-        for tree in self.trees:
-            if self.is_visible(tree):
-                visible_trees += 1
-        return visible_trees
-
     def find_trees(self, filter_params={}):
+        logger.debug(f"Searching for trees with filter params: {filter_params}")
+
+        def _find_trees(tree_list, filter_params):
+            found_items = []
+            for item in tree_list:
+                if all(
+                    item.__dict__.get(key, None) == val
+                    for key, val in filter_params.items()
+                ):
+                    found_items.append(item)
+            return found_items
+
+        # detect dict in filter params
+        filter_param_dict = False
+        for key, value in filter_params.items():
+            if isinstance(value, dict):
+                filter_param_dict = True
+                break
+
+        # Find all the items that match the lt/gt filter
+        if filter_param_dict:
+            initial_found_items = []
+            for item in self.trees:
+                for sub_key, sub_value in value.items():
+                    if sub_key == "$lt":
+                        if item.__dict__[key] < sub_value:
+                            initial_found_items.append(item)
+                    elif sub_key == "$gt":
+                        if item.__dict__[key] > sub_value:
+                            initial_found_items.append(item)
+
+                    # Then remove dictionaries from the filter params
+                    filter_params = {
+                        key: value
+                        for key, value in filter_params.items()
+                        if not isinstance(value, dict)
+                    }
+
+        # Find all the items that match the remaining filter params
         found_items = []
-
-        for item in self.trees:
-            # if all(
-            #     item.__dict__.get(key, None) == val
-            #     for key, val in filter_params.items()
-            # ):
-
-            for key, value in filter_params.items():
-                if isinstance(value, dict):
-                    for sub_key, sub_value in value.items():
-                        if sub_key == "$lt":
-                            if item.__dict__[key] >= sub_value:
-                                break
-                        elif sub_key == "$gt":
-                            if item.__dict__[key] <= sub_value:
-                                break
-                else:
-                    if item.__dict__[key] != value:
-                        break
-            else:
-
-                found_items.append(item)
+        if filter_param_dict:
+            found_items = _find_trees(initial_found_items, filter_params)
+        else:
+            found_items = _find_trees(self.trees, filter_params)
         return found_items
 
     def related_trees(self, tree):
+        logger.debug(f"Finding related trees for tree: {tree}")
         related_trees = {"left": [], "right": [], "top": [], "bottom": []}
         related_trees["left"] = self.find_trees({"y": tree.y, "x": {"$lt": tree.x}})
         related_trees["right"] = self.find_trees({"y": tree.y, "x": {"$gt": tree.x}})
@@ -98,34 +118,86 @@ class Forest:
         related_trees["bottom"] = self.find_trees({"x": tree.x, "y": {"$gt": tree.y}})
         return related_trees
 
-    def is_visible(self, tree):
+    def check_visbility(self, tree):
+        logger.debug(f"Checking visibility for tree: {tree}")
+        visibile_from = ["left", "right", "top", "bottom"]
         related_trees = self.related_trees(tree)
         for direction, trees in related_trees.items():
-            if not trees:
-                continue
-            if direction in ["left", "top"]:
-                trees.sort(key=lambda x: x.__dict__[direction], reverse=True)
-            else:
-                trees.sort(key=lambda x: x.__dict__[direction])
             for related_tree in trees:
-                if related_tree.height > tree.height:
-                    return False
-        return True
+                if related_tree.height >= tree.height:
+                    logger.debug(
+                        f"{tree} is not visible from {direction} due to {related_tree}"
+                    )
+                    visibile_from.remove(direction)
+                    break
+        tree.visible_from = visibile_from
+        logger.debug(f"{tree} is visible from {tree.visible_from}")
+        return tree
 
 
 class Tree:
     def __init__(self, x, y, height):
-        self.x = x
-        self.y = y
-        self.height = height
+        self.x: int = x
+        self.y: int = y
+        self.height: int = height
         self.visible_from = []
 
     def __repr__(self):
         return f"Tree(x={self.x}, y={self.y}, height={self.height})"
 
+    def __str__(self):
+        return f"Tree(x={self.x}, y={self.y}, height={self.height})"
 
-lines = parse_input()
-forest = Forest(lines)
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __gt__(self, other):
+        return self.height > other.height
+
+    def __lt__(self, other):
+        return self.height < other.height
+
+
+forest = Forest(parse_input())
 logger.info(f"forest: {forest}")
-# logger.info(f"trees: {forest.trees}")
-print(forest.related_trees(forest.trees[2]))
+
+visible_trees = 0
+for tree in forest.trees:
+    if tree.visible_from:
+        visible_trees += 1
+print(visible_trees)
+
+# --- Part Two ---
+# Content with the amount of tree cover available, the Elves just need to know the best spot to build their tree house: they would like to be able to see a lot of trees.
+
+# To measure the viewing distance from a given tree, look up, down, left, and right from that tree; stop if you reach an edge or at the first tree that is the same height or taller than the tree under consideration. (If a tree is right on the edge, at least one of its viewing distances will be zero.)
+
+# The Elves don't care about distant trees taller than those found by the rules above; the proposed tree house has large eaves to keep it dry, so they wouldn't be able to see higher than the tree house anyway.
+
+# In the example above, consider the middle 5 in the second row:
+
+# 30373
+# 25512
+# 65332
+# 33549
+# 35390
+# Looking up, its view is not blocked; it can see 1 tree (of height 3).
+# Looking left, its view is blocked immediately; it can see only 1 tree (of height 5, right next to it).
+# Looking right, its view is not blocked; it can see 2 trees.
+# Looking down, its view is blocked eventually; it can see 2 trees (one of height 3, then the tree of height 5 that blocks its view).
+# A tree's scenic score is found by multiplying together its viewing distance in each of the four directions. For this tree, this is 4 (found by multiplying 1 * 1 * 2 * 2).
+
+# However, you can do even better: consider the tree of height 5 in the middle of the fourth row:
+
+# 30373
+# 25512
+# 65332
+# 33549
+# 35390
+# Looking up, its view is blocked at 2 trees (by another tree with a height of 5).
+# Looking left, its view is not blocked; it can see 2 trees.
+# Looking down, its view is also not blocked; it can see 1 tree.
+# Looking right, its view is blocked at 2 trees (by a massive tree of height 9).
+# This tree's scenic score is 8 (2 * 2 * 1 * 2); this is the ideal spot for the tree house.
+
+# Consider each tree on your map. What is the highest scenic score possible for any tree?
