@@ -1,21 +1,27 @@
-#!/usr/bin/python
-import os
-import sys
-import logging
-from pprint import pformat, pprint
+import re
+from loguru import logger
 
-logger = logging.getLogger("logger")
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-PUZZLE_INPUT = f"{os.path.dirname(os.path.realpath(__file__))}/puzzle_input.txt"
+example = """
+1abc2
+pqr3stu8vwx
+a1b2c3d4e5f
+treb7uchet
+"""
 
+def solve():
+    total = 0
+    for line in example:
+        logger.debug(f"line: {line}")
+        c = 0
+        line_ints = re.findall(r'\d+', line)
+        line_ints = [int(i) for i in line_ints]
+        logger.debug(f"line_ints: {line_ints}")
 
-def parse_input():
-    with open(PUZZLE_INPUT, "r") as f:
-        lines = f.readlines()
-    return lines
+        first_int = line_ints[0]
+        last_int = line_ints[-1]
+        logger.debug(f"ints: {first_int}, {last_int}")
 
+        c = first_int * 10 + last_int
+        logger.debug(f"c: {c}")
 
+    total += c
