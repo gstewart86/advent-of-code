@@ -9,6 +9,7 @@ CHALLENGE_FILENAME := challenge.py
 INPUT_FILENAME := puzzle_input.txt
 TEMPLATE_FILENAME := template.py
 VENV_DIR := .venv
+LOG_LEVEL ?= INFO
 
 # Create a new day's challenge
 .PHONY: new
@@ -29,7 +30,7 @@ setup:
 # Run the challenge for a specified day using the Python script
 .PHONY: run
 run:
-	python tools/run_challenge.py --day $(DAY) --year $(YEAR)
+	python tools/run_challenge.py --day $(DAY) --year $(YEAR) --log-level ${LOG_LEVEL}
 
 # Clean up generated files and directories
 .PHONY: clean
